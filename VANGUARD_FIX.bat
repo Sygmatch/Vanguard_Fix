@@ -57,7 +57,7 @@ echo  ==========================================================================
 echo.
 set "juego_detectado="
 
-REM Verificamos si League of Legends esta abierto
+REM Verificamos League of Legends
 tasklist /fi "imagename eq League of Legends.exe" 2>NUL | find /i "League of Legends.exe" >NUL
 if not errorlevel 1 (
     set "juego_detectado=LoL"
@@ -65,7 +65,7 @@ if not errorlevel 1 (
     taskkill /f /im "League of Legends.exe" >nul 2>&1
 )
 
-REM Verificamos si Valorant esta abierto
+REM Verificamos Valorant
 tasklist /fi "imagename eq VALORANT.exe" 2>NUL | find /i "VALORANT.exe" >NUL
 if not errorlevel 1 (
     set "juego_detectado=Valorant"
@@ -74,7 +74,7 @@ if not errorlevel 1 (
     taskkill /f /im "Valorant-Win64-Shipping.exe" >nul 2>&1
 )
 
-if "%juego_detectado%"=="" (
+if not defined juego_detectado (
     echo [i] No se encontro ningun juego principal abierto (LoL o Valorant).
 )
 
@@ -184,10 +184,10 @@ ipconfig /flushdns >nul 2>&1
 timeout /t 2 /nobreak >nul
 
 echo [4/4] Re-lanzando el juego detectado...
-if "%juego_detectado%"=="LoL" (
+if "!juego_detectado!"=="LoL" (
     echo     ^> Iniciando League of Legends...
     start "" "riotclient://launch-product=league_of_legends&line=live"
-) else if "%juego_detectado%"=="Valorant" (
+) else if "!juego_detectado!"=="Valorant" (
     echo     ^> Iniciando Valorant...
     start "" "riotclient://launch-product=valorant&line=live"
 ) else (

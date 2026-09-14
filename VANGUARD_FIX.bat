@@ -1,204 +1,205 @@
-@echo off
-NET SESSION >nul 2>&1
-if %errorLevel% NEQ 0 (
-    powershell -Command "Start-Process '%~f0' -Verb RunAs"
-    exit /b
-)
+<#
+.SYNOPSIS
+    Reinicio y Reparacion de Riot Services - MARCKO-SYGMATCH (GUI Edition)
+.DESCRIPTION
+    Script avanzado con interfaz grafica en Windows Forms para la gestion,
+    limpieza de procesos, reinicio de Vanguard y reparacion de red para LoL y Valorant.
+.LINK
+    https://github.com/Sygmatch/Vanguard_Fix
+#>
 
-setlocal enabledelayedexpansion
-title Reinicio y Reparacion de Riot Services - MARCKO-SYGMATCH
-mode con cols=95 lines=38
-color 0B
+# Asegurar privilegios de Administrador
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
 
-:MENU
-cls
-echo.
-echo  ========================================================================================
-echo   M A R C K O  -  S Y G M A T C H   ^|   VANGUARD FIX ^& REBOOT
-echo  ========================================================================================
-echo.
-echo   [ 1 ] CERRAR PROCESOS DE RIOT / JUEGO ACTIVO (LoL o Valorant)
-echo         ^> Detecta y fuerza el cierre del juego activo y servicios de Riot.
-echo.
-echo   [ 2 ] REINICIAR SERVICIO VANGUARD (vgc)
-echo         ^> Detiene y vuelve a iniciar el sistema anti-trampas en segundo plano.
-echo.
-echo   [ 3 ] RE-LANZAR LEAGUE OF LEGENDS
-echo         ^> Inicia League of Legends utilizando el protocolo de Riot Client.
-echo.
-echo   [ 4 ] RE-LANZAR VALORANT
-echo         ^> Inicia Valorant utilizando el protocolo de Riot Client.
-echo.
-echo   [ 5 ] REPARAR CONEXION / FLUSH DNS
-echo         ^> Limpia la cache DNS de Windows para resolver problemas de reconexion.
-echo.
-echo   [ X ] EJECUTAR RESTART COMPLETO (Detectar juego, Cerrar, Reiniciar vgc, Limpiar DNS y Re-lanzar)
-echo.
-echo   [ 0 ] Salir
-echo.
-echo  ========================================================================================
-set /p opcion=" Selecciona una opcion [1-5, X o 0]: "
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
-if "%opcion%"=="1" goto OPCION_1
-if "%opcion%"=="2" goto OPCION_2
-if "%opcion%"=="3" goto OPCION_3
-if "%opcion%"=="4" goto OPCION_4
-if "%opcion%"=="5" goto OPCION_5
-if /i "%opcion%"=="X" goto OPCION_X
-if "%opcion%"=="0" exit
-goto MENU
+[System.Windows.Forms.Application]::EnableVisualStyles()
 
-:OPCION_1
-cls
-echo.
-echo  ========================================================================================
-echo   DETECTANDO Y CERRANDO JUEGOS Y PROCESOS DE RIOT
-echo  ========================================================================================
-echo.
-set "juego_detectado="
+# ==========================================
+# CREACION DE LA INTERFAZ GRAFICA (GUI)
+# ==========================================
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "MARCKO-SYGMATCH | Vanguard Fix & Reboot GUI"
+$form.Size = New-Object System.Drawing.Size(680, 565)
+$form.StartPosition = "CenterScreen"
+$form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+$form.MaximizeBox = $false
+$form.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 18)
+$form.ForeColor = [System.Drawing.Color]::White
 
-REM Verificamos League of Legends
-tasklist /fi "imagename eq League of Legends.exe" 2>NUL | find /i "League of Legends.exe" >NUL
-if not errorlevel 1 (
-    set "juego_detectado=LoL"
-    echo [!] Se detecto League of Legends en ejecucion. Cerrando...
-    taskkill /f /im "League of Legends.exe" >nul 2>&1
-)
+# Titulo Superior
+$lblTitle = New-Object System.Windows.Forms.Label
+$lblTitle.Text = "MARCKO-SYGMATCH | GESTOR DE RIOT & VANGUARD"
+$lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$lblTitle.ForeColor = [System.Drawing.Color]::FromArgb(0, 210, 255)
+$lblTitle.Location = New-Object System.Drawing.Point(20, 15)
+$lblTitle.Size = New-Object System.Drawing.Size(620, 30)
+$form.Controls.Add($lblTitle)
 
-REM Verificamos Valorant
-tasklist /fi "imagename eq VALORANT.exe" 2>NUL | find /i "VALORANT.exe" >NUL
-if not errorlevel 1 (
-    set "juego_detectado=Valorant"
-    echo [!] Se detecto Valorant en ejecucion. Cerrando...
-    taskkill /f /im "VALORANT.exe" >nul 2>&1
-    taskkill /f /im "Valorant-Win64-Shipping.exe" >nul 2>&1
-)
+# Consola de Registro / Salida (RichTextBox)
+$txtLog = New-Object System.Windows.Forms.RichTextBox
+$txtLog.Location = New-Object System.Drawing.Point(20, 55)
+$txtLog.Size = New-Object System.Drawing.Size(410, 450)
+$txtLog.BackColor = [System.Drawing.Color]::FromArgb(28, 28, 28)
+$txtLog.ForeColor = [System.Drawing.Color]::FromArgb(0, 255, 128)
+$txtLog.Font = New-Object System.Drawing.Font("Consolas", 9)
+$txtLog.ReadOnly = $true
+$form.Controls.Add($txtLog)
 
-if not defined juego_detectado (
-    echo [i] No se encontro ningun juego principal abierto (LoL o Valorant).
-)
+# Funcion para escribir en el log
+function Write-Log {
+    param([string]$Message, [string]$Type = "INFO")
+    $timestamp = Get-Date -Format "HH:mm:ss"
+    $colorPrefix = "[$timestamp] [$Type] "
+    $txtLog.AppendText("$colorPrefix$Message`n")
+    $txtLog.ScrollToCaret()
+}
 
-echo [!] Finalizando servicios generales de Riot Client...
-taskkill /f /im "RiotClientServices.exe" >nul 2>&1
-taskkill /f /im "RiotClientCrashHandler.exe" >nul 2>&1
-echo.
-echo [OK] Procesos cerrados de forma limpia.
-pause
-goto MENU
+# ==========================================
+# LOGICA DE LAS ACCIONES
+# ==========================================
 
-:OPCION_2
-cls
-echo.
-echo  ========================================================================================
-echo   REINICIANDO SERVICIO VANGUARD (vgc)
-echo  ========================================================================================
-echo.
-echo [!] Deteniendo servicio vgc...
-net stop vgc >nul 2>&1
-timeout /t 2 /nobreak >nul
-echo [!] Iniciando servicio vgc...
-net start vgc >nul 2>&1
-echo.
-echo [OK] Servicio Vanguard reiniciado con exito.
-pause
-goto MENU
+function Invoke-CloseRiotProcesses {
+    Write-Log "Detectando y cerrando juegos y procesos de Riot..." "ACTION"
+    $juegoDetectado = $false
 
-:OPCION_3
-cls
-echo.
-echo  ========================================================================================
-echo   INICIANDO LEAGUE OF LEGENDS
-echo  ========================================================================================
-echo.
-echo [!] Enviando orden de arranque a Riot Client para League of Legends...
-start "" "riotclient://launch-product=league_of_legends&line=live"
-echo.
-echo [OK] Solicitud enviada correctamente.
-timeout /t 2 /nobreak >nul
-goto MENU
+    # Verificacion y cierre completo de League of Legends (Cierre total de subprocesos)
+    $lolProcesses = @("League of Legends", "LeagueClient", "LeagueClientUx", "LeagueClientUxRender", "LeagueCrashHandler")
+    $lolRunning = Get-Process -Name $lolProcesses -ErrorAction SilentlyContinue
+    if ($lolRunning) {
+        $juegoDetectado = "LoL"
+        Write-Log "Se detecto League of Legends activo. Forzando cierre total..." "WARN"
+        foreach ($proc in $lolProcesses) {
+            Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue
+        }
+    }
 
-:OPCION_4
-cls
-echo.
-echo  ========================================================================================
-echo   INICIANDO VALORANT
-echo  ========================================================================================
-echo.
-echo [!] Enviando orden de arranque a Riot Client para Valorant...
-start "" "riotclient://launch-product=valorant&line=live"
-echo.
-echo [OK] Solicitud enviada correctamente.
-timeout /t 2 /nobreak >nul
-goto MENU
+    # Verificacion y cierre completo de Valorant (Cierre total de subprocesos)
+    $valProcesses = @("VALORANT", "Valorant-Win64-Shipping", "RiotClientServices", "RiotClientCrashHandler")
+    $valRunning = Get-Process -Name $valProcesses -ErrorAction SilentlyContinue
+    if ($valRunning) {
+        $juegoDetectado = "Valorant"
+        Write-Log "Se detecto Valorant activo. Forzando cierre total..." "WARN"
+        foreach ($proc in $valProcesses) {
+            Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue
+        }
+    }
 
-:OPCION_5
-cls
-echo.
-echo  ========================================================================================
-echo   LIMPIEZA DE CACHE DNS DE RED
-echo  ========================================================================================
-echo.
-echo [!] Limpiando la cache de resolucion DNS...
-ipconfig /flushdns >nul 2>&1
-echo.
-echo [OK] Cache DNS vaciada con exito.
-pause
-goto MENU
+    # Asegurar cierre de servicios generales de Riot Client
+    Stop-Process -Name "RiotClientServices", "RiotClientCrashHandler" -Force -ErrorAction SilentlyContinue
 
-:OPCION_X
-cls
-echo.
-echo  ========================================================================================
-echo   EJECUTANDO RECONEXION Y RESTART COMPLETO (CON DETECCION)
-echo  ========================================================================================
-echo.
-echo [1/4] Detectando juego activo y cerrando procesos de Riot...
-set "juego_detectado="
+    if (-not $juegoDetectado) {
+        Write-Log "No se encontro ningun juego principal abierto (LoL o Valorant)." "INFO"
+    }
+    Write-Log "Procesos cerrados de forma limpia." "SUCCESS"
+    Write-Log "--------------------------------------------------"
+    return $juegoDetectado
+}
 
-tasklist /fi "imagename eq League of Legends.exe" 2>NUL | find /i "League of Legends.exe" >NUL
-if not errorlevel 1 (
-    set "juego_detectado=LoL"
-    echo     ^> League of Legends detectado. Forzando cierre...
-    taskkill /f /im "League of Legends.exe" >nul 2>&1
-)
+function Invoke-RestartVanguard {
+    Write-Log "Reiniciando servicio de seguridad Vanguard (vgc)..." "ACTION"
+    Write-Log "Deteniendo servicio vgc..." "INFO"
+    net stop vgc | Out-Null
+    Start-Sleep -Seconds 2
+    Write-Log "Iniciando servicio vgc..." "INFO"
+    net start vgc | Out-Null
+    Write-Log "Servicio Vanguard reiniciado con exito." "SUCCESS"
+    Write-Log "--------------------------------------------------"
+}
 
-tasklist /fi "imagename eq VALORANT.exe" 2>NUL | find /i "VALORANT.exe" >NUL
-if not errorlevel 1 (
-    set "juego_detectado=Valorant"
-    echo     ^> Valorant detectado. Forzando cierre...
-    taskkill /f /im "VALORANT.exe" >nul 2>&1
-    taskkill /f /im "Valorant-Win64-Shipping.exe" >nul 2>&1
-)
+function Invoke-LaunchLoL {
+    Write-Log "Enviando orden de arranque a Riot Client para League of Legends..." "ACTION"
+    Start-Process "riotclient://launch-product=league_of_legends&line=live"
+    Write-Log "Solicitud enviada correctamente." "SUCCESS"
+    Write-Log "--------------------------------------------------"
+}
 
-taskkill /f /im "RiotClientServices.exe" >nul 2>&1
-taskkill /f /im "RiotClientCrashHandler.exe" >nul 2>&1
-timeout /t 2 /nobreak >nul
+function Invoke-LaunchValorant {
+    Write-Log "Enviando orden de arranque a Riot Client para Valorant..." "ACTION"
+    Start-Process "riotclient://launch-product=valorant&line=live"
+    Write-Log "Solicitud enviada correctamente." "SUCCESS"
+    Write-Log "--------------------------------------------------"
+}
 
-echo [2/4] Reiniciando servicio de seguridad Vanguard (vgc)...
-net stop vgc >nul 2>&1
-timeout /t 2 /nobreak >nul
-net start vgc >nul 2>&1
+function Invoke-FlushDNS {
+    Write-Log "Limpiando la cache de resolucion DNS..." "ACTION"
+    ipconfig /flushdns | Out-Null
+    Write-Log "Cache DNS vaciada con exito." "SUCCESS"
+    Write-Log "--------------------------------------------------"
+}
 
-echo [3/4] Refrescando la red y tabla DNS...
-ipconfig /flushdns >nul 2>&1
-timeout /t 2 /nobreak >nul
+function Invoke-CompleteRestart {
+    Write-Log "=== EJECUTANDO RESTART COMPLETO ===" "ACTION"
+    $juego = Invoke-CloseRiotProcesses
+    Start-Sleep -Seconds 1
+    Invoke-RestartVanguard
+    Start-Sleep -Seconds 1
+    Invoke-FlushDNS
+    Start-Sleep -Seconds 1
 
-echo [4/4] Re-lanzando el juego detectado...
-if "!juego_detectado!"=="LoL" (
-    echo     ^> Iniciando League of Legends...
-    start "" "riotclient://launch-product=league_of_legends&line=live"
-) else if "!juego_detectado!"=="Valorant" (
-    echo     ^> Iniciando Valorant...
-    start "" "riotclient://launch-product=valorant&line=live"
-) else (
-    echo     ^> No habia ningun juego abierto, abriendo Riot Client general...
-    start "" "riotclient://launch-product=riot&line=live"
-)
+    Write-Log "Re-lanzando el juego detectado o cliente..." "ACTION"
+    if ($juego -eq "LoL") {
+        Write-Log "Iniciando League of Legends..." "INFO"
+        Start-Process "riotclient://launch-product=league_of_legends&line=live"
+    } elseif ($juego -eq "Valorant") {
+        Write-Log "Iniciando Valorant..." "INFO"
+        Start-Process "riotclient://launch-product=valorant&line=live"
+    } else {
+        Write-Log "No habia juego abierto, abriendo Riot Client general..." "INFO"
+        Start-Process "riotclient://launch-product=riot&line=live"
+    }
+    Write-Log "Proceso completado exitosamente." "SUCCESS"
+    Write-Log "=================================================="
+}
 
-echo.
-echo  ========================================================================================
-echo   [OK] PROCESO FINALIZADO DE FORMA LIMPIA.
-echo  ========================================================================================
-echo.
-timeout /t 3 /nobreak >nul
-exit
+function Open-GitHubRepo {
+    Write-Log "Abriendo repositorio de GitHub..." "INFO"
+    Start-Process "https://github.com/Sygmatch/Vanguard_Fix"
+}
+
+# ==========================================
+# CREACION DE BOTONES DE LA GUI
+# ==========================================
+
+function New-CustomButton {
+    param($text, $yPos, $action, $bgColor = [System.Drawing.Color]::FromArgb(45, 45, 48))
+    $btn = New-Object System.Windows.Forms.Button
+    $btn.Text = $text
+    $btn.Location = New-Object System.Drawing.Point(445, $yPos)
+    $btn.Size = New-Object System.Drawing.Size(205, 38)
+    $btn.BackColor = $bgColor
+    $btn.ForeColor = [System.Drawing.Color]::White
+    $btn.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $btn.FlatAppearance.BorderSize = 1
+    $btn.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(80, 80, 80)
+    $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $btn.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $btn.Add_Click($action)
+    return $btn
+}
+
+$form.Controls.Add((New-CustomButton "Cerrar Procesos Riot/Juego" 55 { Invoke-CloseRiotProcesses }))
+$form.Controls.Add((New-CustomButton "Reiniciar Vanguard (vgc)" 100 { Invoke-RestartVanguard }))
+$form.Controls.Add((New-CustomButton "Re-lanzar LoL" 145 { Invoke-LaunchLoL }))
+$form.Controls.Add((New-CustomButton "Re-lanzar Valorant" 190 { Invoke-LaunchValorant }))
+$form.Controls.Add((New-CustomButton "Reparar Conexion / DNS" 235 { Invoke-FlushDNS }))
+
+# Boton Destacado para Restart Completo (Sin la 'X')
+$form.Controls.Add((New-CustomButton "RESTART COMPLETO" 290 { Invoke-CompleteRestart } ([System.Drawing.Color]::FromArgb(0, 122, 204))))
+
+# Boton de GitHub
+$form.Controls.Add((New-CustomButton "GitHub: Vanguard_Fix" 345 { Open-GitHubRepo } ([System.Drawing.Color]::FromArgb(33, 110, 83))))
+
+# Boton Salir (Sin número)
+$form.Controls.Add((New-CustomButton "Salir" 467 { $form.Close() } ([System.Drawing.Color]::FromArgb(180, 50, 50))))
+
+# Mensaje inicial en consola
+Write-Log "Sistema listo. Seleccione una opcion del menu." "INFO"
+Write-Log "Repositorio oficial: https://github.com/Sygmatch/Vanguard_Fix" "INFO"
+
+# Mostrar Formulario
+[void]$form.ShowDialog()
